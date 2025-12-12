@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pong Game</title>
+<style>
+* {
+margin: 0;
+padding: 0;
+box-sizing: border-box;
+}
+
+body {
+background-color: #000000;
+color: #FFFFFF;
+font-family: Arial, sans-serif;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-height: 100vh;
+padding: 20px;
+}
+
+h1 {
+font-size: 48px;
+margin-bottom: 20px;
+}
+
+#gameContainer {
+position: relative;
+}
+
+canvas {
+border: 4px solid #FFFFFF;
+display: block;
+}
+
+#overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background-color: rgba(0, 0, 0, 0.9);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+}
+
+#overlay.hidden {
+display: none;
+}
+
+button {
+padding: 15px 40px;
+background-color: #FFFFFF;
+color: #000000;
+font-size: 20px;
+font-weight: bold;
+border: 2px solid #FFFFFF;
+cursor: pointer;
+transition: all 0.3s;
+}
+
+button:hover {
+background-color: #000000;
+color: #FFFFFF;
+}
+
+.message {
+color: #FFFFFF;
+font-size: 20px;
+margin-bottom: 20px;
+}
+
+.game-over-title {
+font-size: 36px;
+font-weight: bold;
+margin-bottom: 10px;
+}
+
+.final-score {
+font-size: 28px;
+margin-bottom: 30px;
+}
+
+.info {
+margin-top: 30px;
+text-align: center;
+}
+
+.info p {
+margin: 5px 0;
+}
+
+.info-large {
+font-size: 18px;
+}
+
+.info-small {
+font-size: 14px;
+}
+</style>
+
+
+</head>
+<body>
+
+
+
+<div id="gameContainer">
+<canvas id="gameCanvas" width="600" height="500"></canvas>
+
+<div id="overlay">
+<p class="message" id="message">Move mouse to control paddle</p>
+<button id="actionButton">Start Game</button>
+</div>
+</div>
+
+<div class="info">
+<p class="info-large">Keep the ball in play!</p>
+<p class="info-small">The game gets faster every 5 points</p>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const message = document.getElementById('message');
+const actionButton = document.getElementById('actionButton');
+
+let gameStarted = false;
+let gameOver = false;
+let animationId = null;
+let audioContext = null;
+
+const gameState = {
+paddleX: 250,
+paddleWidth: 100,
+paddleHeight: 15,
+ballX: 300,
+ballY: 300,
+ballRadius: 8,
+ballSpeedX: 3,
+ballSpeedY: -3,
+score: 0
+};
+
+function playSound(frequency, duration) {
+if (!audioContext) {
+audioContext = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+const oscillator = audioContext.createOscillator();
+const gainNode = audioContext.createGain();
+
+oscillator.connect(gainNode);
+gainNode.connect(audioContext.destination);
+
+oscillator.frequency.value = frequency;
+oscillator.type = 'square';
+
+gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+oscillator.start(audioContext.currentTime);
+oscillator.stop(audioContext.currentTime + duration);
+}
+
+function drawGame() {
+// Clear canvas - black background
+ctx.fillStyle = '#000000';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Draw walls - white
+ctx.fillStyle = '#FFFFFF';
+
+// Top wall
+ctx.fillRect(0, 0, canvas.width, 20);
+
+// Left wall
+ctx.fillRect(0, 0, 20, canvas.height);
+
+// Right wall
+ctx.fillRect(canvas.width - 20, 0, 20, canvas.height);
+
+// Draw paddle - white
+ctx.fillStyle = '#FFFFFF';
+ctx.fillRect(gameState.paddleX, canvas.height - 40, gameState.paddleWidth, gameState.paddleHeight);
+
+// Draw ball - white
+ctx.fillStyle = '#FFFFFF';
+ctx.beginPath();
+ctx.arc(gameState.ballX, gameState.ballY, gameState.ballRadius, 0, Math.PI * 2);
+ctx.fill();
+
+// Draw score - white
+ctx.fillStyle = '#FFFFFF';
+ctx.font = 'bold 24px Arial';
+ctx.fillText('Score: ' + gameState.score, 40, 50);
+}
+
+function updateGame() {
+if (!gameStarted || gameOver) return;
+
+// Update ball position
+gameState.ballX += gameState.ballSpeedX;
+gameState.ballY += gameState.ballSpeedY;
+
+// Ball collision with top wall
+if (gameState.ballY - gameState.ballRadius <= 20) {
+gameState.ballY = 20 + gameState.ballRadius;
+gameState.ballSpeedY = -gameState.ballSpeedY;
+playSound(300, 0.1);
+}
+
+// Ball collision with left wall
+if (gameState.ballX - gameState.ballRadius <= 20) {
+gameState.ballX = 20 + gameState.ballRadius;
+gameState.ballSpeedX = -gameState.ballSpeedX;
+playSound(300, 0.1);
+}
+
+// Ball collision with right wall
+if (gameState.ballX + gameState.ballRadius >= canvas.width - 20) {
+gameState.ballX = canvas.width - 20 - gameState.ballRadius;
+gameState.ballSpeedX = -gameState.ballSpeedX;
+playSound(300, 0.1);
+}
+
+// Ball collision with paddle
+if (
+gameState.ballY + gameState.ballRadius >= canvas.height - 40 &&
+gameState.ballY + gameState.ballRadius <= canvas.height - 25 &&
+gameState.ballX >= gameState.paddleX &&
+gameState.ballX <= gameState.paddleX + gameState.paddleWidth
+) {
+gameState.ballY = canvas.height - 40 - gameState.ballRadius;
+gameState.ballSpeedY = -gameState.ballSpeedY;
+
+// Add spin based on where ball hits paddle
+const hitPos = (gameState.ballX - gameState.paddleX) / gameState.paddleWidth;
+gameState.ballSpeedX = (hitPos - 0.5) * 8;
+
+gameState.score += 1;
+playSound(450, 0.1);
+
+// Increase difficulty
+if (gameState.score % 5 === 0) {
+gameState.ballSpeedY *= 1.1;
+}
+}
+
+// Ball falls below paddle - game over
+if (gameState.ballY - gameState.ballRadius > canvas.height) {
+gameOver = true;
+playSound(150, 0.3);
+showGameOver();
+}
+}
+
+function gameLoop() {
+updateGame();
+drawGame();
+animationId = requestAnimationFrame(gameLoop);
+}
+
+function handleMouseMove(e) {
+if (!gameStarted || gameOver) return;
+
+const rect = canvas.getBoundingClientRect();
+const mouseX = e.clientX - rect.left;
+
+gameState.paddleX = Math.max(20, Math.min(mouseX - gameState.paddleWidth / 2, canvas.width - 20 - gameState.paddleWidth));
+}
+
+function startGame() {
+gameStarted = true;
+gameOver = false;
+
+gameState.paddleX = 250;
+gameState.paddleWidth = 100;
+gameState.paddleHeight = 15;
+gameState.ballX = 300;
+gameState.ballY = 300;
+gameState.ballRadius = 8;
+gameState.ballSpeedX = 3;
+gameState.ballSpeedY = -3;
+gameState.score = 0;
+
+overlay.classList.add('hidden');
+gameLoop();
+}
+
+function showGameOver() {
+overlay.classList.remove('hidden');
+message.innerHTML = '<div class="game-over-title">Game Over!</div><div class="final-score">Final Score: ' + gameState.score + '</div>';
+actionButton.textContent = 'Play Again';
+}
+
+// Event listeners
+canvas.addEventListener('mousemove', handleMouseMove);
+
+actionButton.addEventListener('click', () => {
+if (animationId) {
+cancelAnimationFrame(animationId);
+}
+startGame();
+});
+
+// Initial draw
+drawGame();
+</script>
+`
+
+</body>
+</html>
